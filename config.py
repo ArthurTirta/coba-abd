@@ -1,81 +1,141 @@
-import psycopg2
+"""
+config.py
+File konfigurasi koneksi Supabase dan fungsi query database
+"""
 
-# Koneksi ke database PostgreSQL
-conn = psycopg2.connect(
-    host="127.0.0.1",
-    port=5432,    
-    user="postgres",
-    password="postgres",
-    dbname="sales_db"     # nama database
-)
-
-print("Koneksi PostgreSQL berhasil!")
-
-# Membuat cursor
-c = conn.cursor()
+import streamlit as st
+from supabase import create_client, Client
 
 # ============================
-# Fungsi ambil data dari tabel
+# Initialize Supabase Connection
+# ============================
+
+@st.cache_resource
+def init_supabase():
+    """Inisialisasi koneksi Supabase"""
+    url = st.secrets["supabase"]["url"]
+    key = st.secrets["supabase"]["key"]
+    return create_client(url, key)
+
+# Buat instance Supabase
+supabase = init_supabase()
+
+# ============================
+# Fungsi Query Database
 # ============================
 
 def view_customers():
-    query = '''
-        SELECT customer_id, name, email, phone, address, birthdate
-        FROM customers
-        ORDER BY name ASC
-    '''
-    c.execute(query)
-    return c.fetchall()
+    """Ambil semua data customers"""
+    try:
+        response = supabase.table('customers') \
+            .select('customer_id, name, email, phone, address, birthdate') \
+            .order('name', desc=False) \
+            .execute()
+        
+        # Konversi ke format tuple seperti psycopg2
+        return [tuple(row.values()) for row in response.data]
+    except Exception as e:
+        st.error(f"Error mengambil data customers: {e}")
+        return []
+
 
 def view_orders_with_customers():
-    query = '''
-        SELECT 
-            o.order_id, 
-            o.order_date, 
-            o.total_amount, 
-            c.name AS customer_name, 
-            c.phone 
-        FROM orders o
-        JOIN customers c ON o.customer_id = c.customer_id
-        ORDER BY o.order_date DESC
-    '''
-    c.execute(query)
-    return c.fetchall()
+    """Ambil data orders dengan informasi customer (JOIN)"""
+    try:
+        response = supabase.table('orders') \
+            .select('order_id, order_date, total_amount, customer_id, customers(name, phone)') \
+            .order('order_date', desc=True) \
+            .execute()
+        
+        # Format hasil ke tuple: (order_id, order_date, total_amount, customer_name, phone)
+        result = []
+        for row in response.data:
+            result.append((
+                row['order_id'],
+                row['order_date'],
+                row['total_amount'],
+                row['customers']['name'],
+                row['customers']['phone']
+            ))
+        return result
+    except Exception as e:
+        st.error(f"Error mengambil data orders: {e}")
+        return []
+
 
 def view_products():
-    query = '''
-        SELECT product_id, name, description, price, stock
-        FROM products
-        ORDER BY name ASC
-    '''
-    c.execute(query)
-    return c.fetchall()
+    """Ambil semua data products"""
+    try:
+        response = supabase.table('products') \
+            .select('product_id, name, description, price, stock') \
+            .order('name', desc=False) \
+            .execute()
+        
+        # Konversi ke format tuple
+        return [tuple(row.values()) for row in response.data]
+    except Exception as e:
+        st.error(f"Error mengambil data products: {e}")
+        return []
+
 
 def view_order_details_with_info():
-    query = '''
-        SELECT 
-            od.order_detail_id,
-            o.order_id,
-            o.order_date,
-            c.customer_id,
-            c.name AS customer_name,
-            p.product_id,
-            p.name AS product_name,
-            p.price AS unit_price,
-            od.quantity,
-            od.subtotal,
-            o.total_amount AS order_total,
-            c.phone
-        FROM order_details od
-        JOIN orders o ON od.order_id = o.order_id
-        JOIN customers c ON o.customer_id = c.customer_id
-        JOIN products p ON od.product_id = p.product_id
-        ORDER BY o.order_date DESC
-    '''
-    c.execute(query)
-    return c.fetchall()
+    """Ambil data order_details lengkap dengan JOIN ke orders, customers, dan products"""
+    try:
+        response = supabase.table('order_details') \
+            .select('''
+                order_detail_id,
+                order_id,
+                quantity,
+                price,
+                subtotal,
+                product_id,
+                products(product_id, name, price),
+                orders(
+                    order_id,
+                    order_date,
+                    total_amount,
+                    customer_id,
+                    customers(customer_id, name, phone)
+                )
+            ''') \
+            .order('order_id', desc=True) \
+            .execute()
+        
+        # Format hasil ke tuple sesuai urutan yang dibutuhkan dashboard:
+        # (order_detail_id, order_id, order_date, customer_id, customer_name,
+        #  product_id, product_name, unit_price, quantity, subtotal, order_total, phone)
+        result = []
+        for row in response.data:
+            result.append((
+                row['order_detail_id'],
+                row['order_id'],
+                row['orders']['order_date'],
+                row['orders']['customers']['customer_id'],
+                row['orders']['customers']['name'],
+                row['products']['product_id'],
+                row['products']['name'],
+                row['products']['price'],  # unit_price
+                row['quantity'],
+                row['subtotal'],
+                row['orders']['total_amount'],
+                row['orders']['customers']['phone']
+            ))
+        return result
+    except Exception as e:
+        st.error(f"Error mengambil data order details: {e}")
+        return []
 
 
-    # Tutup koneksi
-    c.close()
-    conn.close()
+# ============================
+# Test Koneksi (Optional)
+# ============================
+
+def test_connection():
+    """Test koneksi ke Supabase"""
+    try:
+        # Coba query sederhana
+        response = supabase.table('customers').select('count', count='exact').execute()
+        return True
+    except Exception as e:
+        st.error(f"Koneksi gagal: {e}")
+        return False
