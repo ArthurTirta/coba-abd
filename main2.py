@@ -9,7 +9,7 @@ from datetime import datetime
 from config import *
 
 # Set konfigurasi halaman dashboard
-st.set_page_config("Dashboard Sales", page_icon="📊", layout="wide")
+st.set_page_config(page_title="Dashboard Sales", page_icon="📊", layout="wide")
 
 # Header Dashboard
 st.title("📊 Dashboard Penjualan")
@@ -59,7 +59,7 @@ df_details['order_date'] = pd.to_datetime(df_details['order_date'])
 st.sidebar.title("📑 Menu Navigasi")
 menu = st.sidebar.radio(
     "Pilih Halaman:",
-    ["🏠 Overview "," 👥 Data Pelanggan", "📦 Data Produk", "🛒 Data Pesanan", "📈 Analisis Penjualan"]
+    ["🏠 Overview", "👥 Data Pelanggan", "📦 Data Produk", "🛒 Data Pesanan", "📈 Analisis Penjualan"]
 )
 
 # =====================
@@ -98,9 +98,9 @@ if menu == "🏠 Overview":
         monthly_revenue = monthly_revenue.sort_values(['year', 'month_name'])
         
         fig = px.line(monthly_revenue, x='month_name', y='total_amount', 
-        title='Trend Pendapatan per Bulan',
-        labels={'month_name': 'Bulan', 'total_amount': 'Pendapatan (Rp)'},
-        markers=True)
+                     title='Trend Pendapatan per Bulan',
+                     labels={'month_name': 'Bulan', 'total_amount': 'Pendapatan (Rp)'},
+                     markers=True)
         fig.update_traces(line_color='#1f77b4', line_width=3)
         st.plotly_chart(fig, use_container_width=True)
     
@@ -193,7 +193,7 @@ elif menu == "👥 Data Pelanggan":
     st.markdown("### 📋 Tabel Data Pelanggan")
     showdata = st.multiselect(
         "Pilih Kolom yang Ditampilkan",
-        options=filtered_df.columns,
+        options=filtered_df.columns.tolist(),
         default=["customer_id", "name", "email", "phone", "Age"]
     )
     
@@ -201,8 +201,8 @@ elif menu == "👥 Data Pelanggan":
     
     # Download Button
     @st.cache_data
-    def convert_df_to_csv(_df):
-        return _df.to_csv(index=False).encode('utf-8')
+    def convert_df_to_csv(df):
+        return df.to_csv(index=False).encode('utf-8')
     
     csv = convert_df_to_csv(filtered_df[showdata])
     st.download_button(
@@ -346,8 +346,8 @@ elif menu == "📈 Analisis Penjualan":
     with col1:
         # Customer Age vs Purchase Amount
         customer_purchase = df_orders.merge(df_customers[['name', 'Age']], 
-        left_on='customer_name', 
-        right_on='name')
+                                           left_on='customer_name', 
+                                           right_on='name')
         fig = px.scatter(customer_purchase, x='Age', y='total_amount',
                         labels={'Age': 'Usia Pelanggan', 'total_amount': 'Nilai Pesanan (Rp)'},
                         title='Hubungan Usia vs Nilai Pesanan',
